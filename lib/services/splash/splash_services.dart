@@ -9,7 +9,7 @@ class SplashServices {
       Duration(seconds: 2),
       () => Navigator.pushNamedAndRemoveUntil(
         context,
-        RoutesName.homeScreen,
+        RoutesName.loginScreen,
         (route) => false,
       ),
     );

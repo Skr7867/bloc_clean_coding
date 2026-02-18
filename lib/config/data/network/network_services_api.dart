@@ -1,13 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
-import 'dart:io';
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../exception/app_exception.dart';
 import 'base_api_services.dart';
-import 'dio_client.dart';
-import 'package:http/http.dart' as http;
 
 class NetworkApiServices extends BaseApiServices {
   @override
@@ -26,8 +23,6 @@ class NetworkApiServices extends BaseApiServices {
           .timeout(const Duration(seconds: 60));
 
       responseJson = returnResponse(response);
-    } on SocketException {
-      throw InternetException('Please turn on internet');
     } on RequestTimeOut {
       throw RequestTimeOut('');
     } on ServerException {
@@ -53,168 +48,114 @@ class NetworkApiServices extends BaseApiServices {
       if (isFileUpload) log("IS FILE UPLOAD: $isFileUpload");
     }
 
+    dynamic responseJson;
     try {
-      Response response;
-
-      /// 🔹 MULTIPART (FILE UPLOAD)
       if (isFileUpload) {
-        if (data is! Map<String, dynamic>) {
-          throw FetchDataException('Invalid multipart payload');
-        }
-
-        String? filePath;
-        final Map<String, dynamic> fields = {};
-
-        for (final entry in data.entries) {
-          if (entry.key == 'businessDocumentFilePath') {
-            filePath = entry.value?.toString();
-          } else {
-            fields[entry.key] = entry.value.toString();
+        final request = http.MultipartRequest('POST', Uri.parse(url))
+          ..headers['Authorization'] = token != null ? 'Bearer $token' : ''
+          ..headers['Content-Type'] = 'multipart/form-data';
+        if (data is Map<String, dynamic>) {
+          for (var entry in data.entries) {
+            if (entry.value is http.MultipartFile) {
+              request.files.add(entry.value);
+            } else {
+              request.fields[entry.key] = entry.value.toString();
+            }
           }
         }
 
-        MultipartFile? multipartFile;
-
-        if (filePath != null) {
-          final file = File(filePath);
-
-          if (!await file.exists()) {
-            throw FetchDataException('File not found at path: $filePath');
-          }
-
-          String mimeType = 'application/octet-stream';
-
-          if (filePath.endsWith('.pdf')) {
-            mimeType = 'application/pdf';
-          } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
-            mimeType = 'image/jpeg';
-          } else if (filePath.endsWith('.png')) {
-            mimeType = 'image/png';
-          }
-
-          multipartFile = await MultipartFile.fromFile(
-            filePath,
-            filename: file.path.split('/').last,
-            contentType: DioMediaType.parse(mimeType),
-          );
-
-          if (kDebugMode) {
-            log('File added: ${file.path}');
-            log('File size: ${await file.length()} bytes');
-            log('Content-Type: $mimeType');
-          }
-        }
-
-        final formData = FormData.fromMap({
-          ...fields,
-          if (multipartFile != null)
-            'businessDocumentUrl': multipartFile, // 🔴 SAME KEY
-        });
-
-        response = await DioClient.dio.post(
-          url,
-          data: formData,
-          options: Options(
-            headers: {if (token != null) 'Authorization': 'Bearer $token'},
-            contentType: 'multipart/form-data',
-          ),
+        final streamedResponse = await request.send().timeout(
+          const Duration(seconds: 60),
         );
-      }
-      /// 🔹 NORMAL JSON POST
-      else {
-        response = await DioClient.dio.post(
-          url,
-          data: data,
-          options: Options(
-            headers: {
-              'Content-Type': 'application/json',
-              if (token != null) 'Authorization': 'Bearer $token',
-            },
-          ),
-        );
-      }
+        final response = await http.Response.fromStream(streamedResponse);
+        responseJson = returnResponse(response);
+      } else {
+        final response = await http
+            .post(
+              Uri.parse(url),
+              headers: {
+                "Content-Type": "application/json",
+                if (token != null) "Authorization": "Bearer $token",
+              },
+              body: data != null ? jsonEncode(data) : null,
+            )
+            .timeout(const Duration(seconds: 60));
 
-      if (kDebugMode) {
-        log('Response Code: ${response.statusCode}');
-        log('Response Body: ${response.data}');
+        responseJson = returnResponse(response);
       }
-
-      return response.data;
+    } on TimeoutException {
+      throw RequestTimeOut('');
+    } on ServerException {
+      throw ServerException();
+    } on InvalidUrl {
+      throw InvalidUrl();
+    } catch (e) {
+      throw FetchDataException('Unexpected error: $e');
     }
-    /// 🔴 ERROR HANDLING (MATCHES YOUR CURRENT BEHAVIOR)
-    on DioException catch (e) {
-      final statusCode = e.response?.statusCode;
-      final resData = e.response?.data;
 
-      if (statusCode == null) {
-        throw InternetException('Please turn on internet');
-      }
+    // if (kDebugMode) log("POST RESPONSE: $responseJson");
 
-      switch (statusCode) {
-        case 400:
-        case 401:
-        case 403:
-        case 404:
-          throw FetchDataException(
-            resData != null && resData['message'] != null
-                ? resData['message']
-                : 'Error: $statusCode',
-          );
-        case 500:
-        case 502:
-        case 503:
-          throw ServerException(
-            resData != null && resData['message'] != null
-                ? resData['message']
-                : 'Server error occurred',
-          );
-        default:
-          throw FetchDataException('Unexpected error occurred: $statusCode');
+    return responseJson;
+  }
+
+  @override
+  Future<dynamic> patchApi(
+    dynamic data,
+    String url, {
+    String? token,
+    bool isFileUpload = false,
+  }) async {
+    if (kDebugMode) {
+      log("PATCH URL: $url");
+      log("PATCH DATA: $data");
+      if (token != null) log("PATCH TOKEN: $token");
+      if (isFileUpload) log("PATCH FILE UPLOAD: $isFileUpload");
+    }
+
+    dynamic responseJson;
+
+    try {
+      if (isFileUpload) {
+        final request = http.MultipartRequest('PATCH', Uri.parse(url))
+          ..headers['Authorization'] = token != null ? 'Bearer $token' : '';
+
+        if (data is Map<String, dynamic>) {
+          for (var entry in data.entries) {
+            if (entry.value is http.MultipartFile) {
+              request.files.add(entry.value);
+            } else {
+              request.fields[entry.key] = entry.value.toString();
+            }
+          }
+        }
+
+        final streamedResponse = await request.send().timeout(
+          const Duration(seconds: 60),
+        );
+
+        final response = await http.Response.fromStream(streamedResponse);
+
+        responseJson = returnResponse(response);
+      } else {
+        final response = await http
+            .patch(
+              Uri.parse(url),
+              headers: {
+                "Content-Type": "application/json",
+                if (token != null) "Authorization": "Bearer $token",
+              },
+              body: data != null ? jsonEncode(data) : null,
+            )
+            .timeout(const Duration(seconds: 60));
+
+        responseJson = returnResponse(response);
       }
     } on TimeoutException {
       throw RequestTimeOut('');
     } catch (e) {
       throw FetchDataException('Unexpected error: $e');
     }
-  }
 
-  @override
-  Future<dynamic> patchApi(
-    Map<String, dynamic> data,
-    String url, {
-    String? token,
-  }) async {
-    if (kDebugMode) {
-      log("PATCH URL: $url");
-      log("PATCH DATA: $data");
-      if (token != null) log("PATCH TOKEN: $token");
-    }
-
-    dynamic responseJson;
-    try {
-      final response = await http
-          .patch(
-            Uri.parse(url),
-            headers: {
-              "Content-Type": "application/json",
-              if (token != null) "Authorization": "Bearer $token",
-            },
-            body: jsonEncode(data),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      responseJson = returnResponse(response);
-    } on SocketException {
-      throw InternetException('Please check your internet connection');
-    } on RequestTimeOut {
-      throw RequestTimeOut('');
-    } on ServerException {
-      throw ServerException();
-    } on InvalidUrl {
-      throw InvalidUrl();
-    }
-
-    if (kDebugMode) log("PATCH RESPONSE: $responseJson");
     return responseJson;
   }
 
@@ -238,8 +179,6 @@ class NetworkApiServices extends BaseApiServices {
           .timeout(const Duration(seconds: 10));
 
       responseJson = returnResponse(response);
-    } on SocketException {
-      throw InternetException('Please turn on internet');
     } on RequestTimeOut {
       throw RequestTimeOut('');
     } on ServerException {
@@ -253,10 +192,8 @@ class NetworkApiServices extends BaseApiServices {
   }
 
   dynamic returnResponse(http.Response response) {
-    if (kDebugMode) {
-      log('Response Code: ${response.statusCode}');
-      log('Response Body: ${response.body}');
-    }
+    log('Response Code: ${response.statusCode}');
+    debugPrint('Response Body: ${response.body}');
 
     dynamic responseJson;
 
@@ -264,10 +201,7 @@ class NetworkApiServices extends BaseApiServices {
       try {
         responseJson = jsonDecode(response.body);
       } catch (e) {
-        // If JSON parsing fails, throw error with response body
-        throw FetchDataException(
-          'Failed to parse response. Status: ${response.statusCode}, Body: ${response.body}',
-        );
+        throw FetchDataException('Failed to parse response: $e');
       }
     } else {
       responseJson = true;
@@ -275,10 +209,13 @@ class NetworkApiServices extends BaseApiServices {
 
     switch (response.statusCode) {
       case 200:
+      case 304:
       case 201:
       case 204:
       case 206:
-      case 304:
+      case 409:
+      case 500:
+      case 401:
         return responseJson;
       case 400:
       case 403:
@@ -287,22 +224,6 @@ class NetworkApiServices extends BaseApiServices {
           responseJson != true && responseJson['message'] != null
               ? responseJson['message']
               : 'Error: ${response.statusCode}',
-        );
-      case 401:
-        throw FetchDataException(
-          responseJson != true && responseJson['message'] != null
-              ? responseJson['message']
-              : 'Unauthorized access',
-        );
-      case 409:
-        return responseJson;
-      case 500:
-      case 502:
-      case 503:
-        throw ServerException(
-          responseJson != true && responseJson['message'] != null
-              ? responseJson['message']
-              : 'Server error occurred',
         );
       default:
         throw FetchDataException(
