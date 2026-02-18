@@ -1,6 +1,7 @@
 import 'dart:developer';
 import 'package:bloc_clean_coding/bloc/login/login_bloc.dart';
 import 'package:bloc_clean_coding/utils/enums.dart';
+import 'package:bloc_clean_coding/utils/flush_bar_helper.dart';
 import 'package:bloc_clean_coding/utils/validation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -101,26 +102,25 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
 
                 BlocListener<LoginBloc, LoginState>(
+                  listenWhen: (current, previous) =>
+                      current.postApiStatus != previous.postApiStatus,
                   listener: (context, state) {
                     if (state.postApiStatus == PostApiStatus.error) {
-                      ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(SnackBar(content: Text(state.messages)));
+                      FlushBarHelper.flushBarErrorMessage(
+                        state.messages.toString(),
+                        context,
+                      );
                     }
                     if (state.postApiStatus == PostApiStatus.sucess) {
-                      ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(SnackBar(content: Text(state.messages)));
-                    }
-
-                    if (state.postApiStatus == PostApiStatus.loading) {
-                      ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(SnackBar(content: Text('Submitting..')));
+                      FlushBarHelper.flushBarErrorMessage(
+                        'Login Successful',
+                        context,
+                      );
                     }
                   },
                   child: BlocBuilder<LoginBloc, LoginState>(
-                    buildWhen: (current, previous) => false,
+                    buildWhen: (current, previous) =>
+                        current.postApiStatus != previous.postApiStatus,
                     builder: (context, state) {
                       log('password build');
                       return ElevatedButton(
@@ -129,7 +129,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             context.read<LoginBloc>().add(LoginApi());
                           }
                         },
-                        child: Text('Login'),
+                        child: state.postApiStatus == PostApiStatus.loading
+                            ? CircularProgressIndicator()
+                            : Text('Login'),
                       );
                     },
                   ),

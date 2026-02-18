@@ -1,39 +1,55 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import '../exception/app_exception.dart';
 import 'base_api_services.dart';
+import 'package:http/http.dart' as http;
+import 'dio_client.dart';
 
 class NetworkApiServices extends BaseApiServices {
-  @override
-  Future<dynamic> getApi(String url, {String? token}) async {
-    if (kDebugMode) log("GET Token: $token");
-    dynamic responseJson;
-    try {
-      final response = await http
-          .get(
-            Uri.parse(url),
-            headers: {
-              "Content-Type": "application/json",
-              if (token != null) "Authorization": "Bearer $token",
-            },
-          )
-          .timeout(const Duration(seconds: 60));
-
-      responseJson = returnResponse(response);
-    } on RequestTimeOut {
-      throw RequestTimeOut('');
-    } on ServerException {
-      throw ServerException();
-    } on InvalidUrl {
-      throw InvalidUrl();
+  void apiLog(String tag, dynamic message) {
+    if (kDebugMode) {
+      log("$tag => $message");
     }
-
-    return responseJson;
   }
 
+  String extractMessage(dynamic data, int statusCode) {
+    if (data is Map && data['message'] != null) {
+      return data['message'].toString();
+    }
+    if (data is String) {
+      return data;
+    }
+    return "Error: $statusCode";
+  }
+
+  /// 🔥 GET API
+  @override
+  Future<dynamic> getApi(String url, {String? token}) async {
+    try {
+      apiLog("GET URL", url);
+      apiLog("GET TOKEN", token);
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          "Content-Type": "application/json",
+          if (token != null) "Authorization": "Bearer $token",
+        },
+      );
+
+      apiLog("GET STATUS", response.statusCode);
+      apiLog("GET RESPONSE", response.body);
+
+      return returnResponse(response);
+    } on SocketException {
+      throw InternetException();
+    }
+  }
+
+  /// 🔥 POST API
   @override
   Future<dynamic> postApi(
     dynamic data,
@@ -41,194 +57,133 @@ class NetworkApiServices extends BaseApiServices {
     String? token,
     bool isFileUpload = false,
   }) async {
-    if (kDebugMode) {
-      log("POST URL: $url");
-      if (data != null) log("POST DATA: $data");
-      if (token != null) log("POST TOKEN: $token");
-      if (isFileUpload) log("IS FILE UPLOAD: $isFileUpload");
-    }
-
-    dynamic responseJson;
     try {
-      if (isFileUpload) {
-        final request = http.MultipartRequest('POST', Uri.parse(url))
-          ..headers['Authorization'] = token != null ? 'Bearer $token' : ''
-          ..headers['Content-Type'] = 'multipart/form-data';
-        if (data is Map<String, dynamic>) {
-          for (var entry in data.entries) {
-            if (entry.value is http.MultipartFile) {
-              request.files.add(entry.value);
-            } else {
-              request.fields[entry.key] = entry.value.toString();
-            }
-          }
-        }
+      apiLog("POST URL", url);
+      apiLog("POST DATA", data);
+      apiLog("POST TOKEN", token);
 
-        final streamedResponse = await request.send().timeout(
-          const Duration(seconds: 60),
-        );
-        final response = await http.Response.fromStream(streamedResponse);
-        responseJson = returnResponse(response);
+      final response = await DioClient.dio.post(
+        url,
+        data: data,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      apiLog("POST STATUS", response.statusCode);
+      apiLog("POST RESPONSE", response.data);
+
+      return response.data;
+    } on DioException catch (e) {
+      apiLog("POST ERROR STATUS", e.response?.statusCode);
+      apiLog("POST ERROR DATA", e.response?.data);
+
+      final statusCode = e.response?.statusCode ?? 500;
+      final resData = e.response?.data;
+
+      final message = extractMessage(resData, statusCode);
+
+      if (statusCode >= 500) {
+        throw ServerException(message);
       } else {
-        final response = await http
-            .post(
-              Uri.parse(url),
-              headers: {
-                "Content-Type": "application/json",
-                if (token != null) "Authorization": "Bearer $token",
-              },
-              body: data != null ? jsonEncode(data) : null,
-            )
-            .timeout(const Duration(seconds: 60));
-
-        responseJson = returnResponse(response);
+        throw FetchDataException(message);
       }
-    } on TimeoutException {
-      throw RequestTimeOut('');
-    } on ServerException {
-      throw ServerException();
-    } on InvalidUrl {
-      throw InvalidUrl();
-    } catch (e) {
-      throw FetchDataException('Unexpected error: $e');
     }
-
-    // if (kDebugMode) log("POST RESPONSE: $responseJson");
-
-    return responseJson;
   }
 
+  /// 🔥 PATCH API
   @override
   Future<dynamic> patchApi(
-    dynamic data,
+    Map<String, dynamic> data,
     String url, {
     String? token,
-    bool isFileUpload = false,
   }) async {
-    if (kDebugMode) {
-      log("PATCH URL: $url");
-      log("PATCH DATA: $data");
-      if (token != null) log("PATCH TOKEN: $token");
-      if (isFileUpload) log("PATCH FILE UPLOAD: $isFileUpload");
-    }
-
-    dynamic responseJson;
-
     try {
-      if (isFileUpload) {
-        final request = http.MultipartRequest('PATCH', Uri.parse(url))
-          ..headers['Authorization'] = token != null ? 'Bearer $token' : '';
+      apiLog("PATCH URL", url);
+      apiLog("PATCH DATA", data);
 
-        if (data is Map<String, dynamic>) {
-          for (var entry in data.entries) {
-            if (entry.value is http.MultipartFile) {
-              request.files.add(entry.value);
-            } else {
-              request.fields[entry.key] = entry.value.toString();
-            }
-          }
-        }
+      final response = await http.patch(
+        Uri.parse(url),
+        headers: {
+          "Content-Type": "application/json",
+          if (token != null) "Authorization": "Bearer $token",
+        },
+        body: jsonEncode(data),
+      );
 
-        final streamedResponse = await request.send().timeout(
-          const Duration(seconds: 60),
-        );
+      apiLog("PATCH STATUS", response.statusCode);
+      apiLog("PATCH RESPONSE", response.body);
 
-        final response = await http.Response.fromStream(streamedResponse);
-
-        responseJson = returnResponse(response);
-      } else {
-        final response = await http
-            .patch(
-              Uri.parse(url),
-              headers: {
-                "Content-Type": "application/json",
-                if (token != null) "Authorization": "Bearer $token",
-              },
-              body: data != null ? jsonEncode(data) : null,
-            )
-            .timeout(const Duration(seconds: 60));
-
-        responseJson = returnResponse(response);
-      }
-    } on TimeoutException {
-      throw RequestTimeOut('');
-    } catch (e) {
-      throw FetchDataException('Unexpected error: $e');
+      return returnResponse(response);
+    } on SocketException {
+      throw InternetException('No Internet');
     }
-
-    return responseJson;
   }
 
+  /// 🔥 DELETE API
   @override
   Future<dynamic> deleteApi(String url, {String? token}) async {
-    if (kDebugMode) {
-      log("DELETE URL: $url");
-      if (token != null) log("DELETE TOKEN: $token");
-    }
-
-    dynamic responseJson;
     try {
-      final response = await http
-          .delete(
-            Uri.parse(url),
-            headers: {
-              "Content-Type": "application/json",
-              if (token != null) "Authorization": "Bearer $token",
-            },
-          )
-          .timeout(const Duration(seconds: 10));
+      apiLog("DELETE URL", url);
 
-      responseJson = returnResponse(response);
-    } on RequestTimeOut {
-      throw RequestTimeOut('');
-    } on ServerException {
-      throw ServerException();
-    } on InvalidUrl {
-      throw InvalidUrl();
+      final response = await http.delete(
+        Uri.parse(url),
+        headers: {
+          "Content-Type": "application/json",
+          if (token != null) "Authorization": "Bearer $token",
+        },
+      );
+
+      apiLog("DELETE STATUS", response.statusCode);
+      apiLog("DELETE RESPONSE", response.body);
+
+      return returnResponse(response);
+    } on SocketException {
+      throw InternetException('No Internet');
     }
-
-    if (kDebugMode) log("DELETE RESPONSE: $responseJson");
-    return responseJson;
   }
 
+  /// 🔥 RESPONSE PARSER
   dynamic returnResponse(http.Response response) {
-    log('Response Code: ${response.statusCode}');
-    debugPrint('Response Body: ${response.body}');
+    apiLog("RETURN STATUS", response.statusCode);
+    apiLog("RETURN BODY", response.body);
 
     dynamic responseJson;
 
     if (response.body.isNotEmpty) {
       try {
         responseJson = jsonDecode(response.body);
-      } catch (e) {
-        throw FetchDataException('Failed to parse response: $e');
+      } catch (_) {
+        throw FetchDataException("Invalid response (${response.statusCode})");
       }
-    } else {
-      responseJson = true;
     }
 
     switch (response.statusCode) {
       case 200:
-      case 304:
       case 201:
       case 204:
-      case 206:
-      case 409:
-      case 500:
-      case 401:
         return responseJson;
+
       case 400:
+      case 401:
       case 403:
       case 404:
         throw FetchDataException(
-          responseJson != true && responseJson['message'] != null
-              ? responseJson['message']
-              : 'Error: ${response.statusCode}',
+          extractMessage(responseJson, response.statusCode),
         );
+
+      case 500:
+      case 502:
+      case 503:
+        throw ServerException(
+          extractMessage(responseJson, response.statusCode),
+        );
+
       default:
-        throw FetchDataException(
-          'Unexpected error occurred: ${response.statusCode}',
-        );
+        throw FetchDataException("Unexpected error ${response.statusCode}");
     }
   }
 }

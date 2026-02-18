@@ -538,7 +538,7 @@ class SubscriptionFeatures {
 }
 
 class Referrals {
-  Null? referredBy;
+  Null referredBy;
   List<String>? referredUsers;
   String? referralCode;
 
