@@ -1,5 +1,7 @@
 import 'dart:developer';
 import 'package:bloc_clean_coding/bloc/login/login_bloc.dart';
+import 'package:bloc_clean_coding/main.dart';
+import 'package:bloc_clean_coding/repository/auth/login_repository.dart';
 import 'package:bloc_clean_coding/utils/enums.dart';
 import 'package:bloc_clean_coding/utils/flush_bar_helper.dart';
 import 'package:bloc_clean_coding/utils/validation.dart';
@@ -14,23 +16,23 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  late LoginBloc loginBloc;
+  // late LoginBloc loginBloc;
   final emailFocusNode = FocusNode();
   final passwordFocusNode = FocusNode();
   final _formKey = GlobalKey<FormState>();
 
-  @override
-  void initState() {
-    super.initState();
-    loginBloc = LoginBloc();
-  }
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   loginBloc = LoginBloc(loginRepository: getIt());
+  // }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Login')),
       body: BlocProvider(
-        create: (_) => LoginBloc(),
+        create: (_) => LoginBloc(getIt<LoginRepository>()),
 
         child: Padding(
           padding: const EdgeInsets.all(20.0),
