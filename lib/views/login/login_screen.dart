@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'package:bloc_clean_coding/bloc/login/login_bloc.dart';
+import 'package:bloc_clean_coding/config/routes/routes_name.dart';
 import 'package:bloc_clean_coding/main.dart';
 import 'package:bloc_clean_coding/repository/auth/login_repository.dart';
 import 'package:bloc_clean_coding/utils/enums.dart';
@@ -108,12 +109,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       current.postApiStatus != previous.postApiStatus,
                   listener: (context, state) {
                     if (state.postApiStatus == PostApiStatus.error) {
+                      // Navigator.pushNamed(context, RoutesName.homeScreen);
                       FlushBarHelper.flushBarErrorMessage(
                         state.messages.toString(),
                         context,
                       );
                     }
                     if (state.postApiStatus == PostApiStatus.sucess) {
+                      Navigator.pushNamed(context, RoutesName.homeScreen);
                       FlushBarHelper.flushBarErrorMessage(
                         'Login Successful',
                         context,
