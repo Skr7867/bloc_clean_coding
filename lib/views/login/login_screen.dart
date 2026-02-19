@@ -117,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     }
                     if (state.postApiStatus == PostApiStatus.sucess) {
                       Navigator.pushNamed(context, RoutesName.homeScreen);
-                      FlushBarHelper.flushBarErrorMessage(
+                      FlushBarHelper.flushBarSuccessMessage(
                         'Login Successful',
                         context,
                       );

@@ -1,36 +1,37 @@
 class AppExceptions implements Exception {
-  final _message;
-  final _prefix;
+  final String message;
 
-  AppExceptions([this._message, this._prefix]);
+  const AppExceptions(this.message);
 
   @override
-  String toString() {
-    return '$_prefix$_message';
-  }
+  String toString() => message;
 }
 
 class InternetException extends AppExceptions {
-  InternetException([String? message]) : super(message, 'No internet');
+  const InternetException([String message = 'No Internet Connection'])
+    : super(message);
 }
 
 class RequestTimeOut extends AppExceptions {
-  RequestTimeOut([String? message]) : super(message, 'Request Time out');
+  const RequestTimeOut([String message = 'Request Timed Out']) : super(message);
 }
 
 class ServerException extends AppExceptions {
-  ServerException([String? message]) : super(message, 'Internal server error');
+  const ServerException([String message = 'Internal Server Error'])
+    : super(message);
 }
 
 class UnauthorisedException extends AppExceptions {
-  UnauthorisedException([String? message])
-    : super(message, 'You dont have access to this ');
+  const UnauthorisedException([
+    String message = 'You do not have access to this resource',
+  ]) : super(message);
 }
 
 class InvalidUrl extends AppExceptions {
-  InvalidUrl([String? message]) : super(message, 'Invalid Url');
+  const InvalidUrl([String message = 'Invalid URL']) : super(message);
 }
 
 class FetchDataException extends AppExceptions {
-  FetchDataException([String? message]) : super(message, '');
+  const FetchDataException([String message = 'Something went wrong'])
+    : super(message);
 }
